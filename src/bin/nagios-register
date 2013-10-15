@@ -1,0 +1,70 @@
+#!/usr/bin/perl -w
+
+use 5.012;
+use strict;
+use warnings;
+
+use Data::Dump 'pp';
+use Getopt::Long;
+use Net::Domain qw(hostname hostfqdn hostdomain domainname);
+
+use Nagios::AutoRegister::Client;
+
+my $config = {};
+GetOptions(
+    $config,
+    'hostname:s',
+    'hostgroup=s@',
+    'servicename=s',
+    'check_command=s',
+    'passive',
+    'silent',
+    'deletehost:s',
+) or usage();
+
+$config->{hostgroup} = join(',', @{$config->{hostgroup}}) if exists $config->{hostgroup};
+
+my $n = Nagios::AutoRegister::Client->new;
+
+my $arg = {};
+
+# XXX: I don't like where this API is going, too much duplicated functionality 
+# between client and server.
+# Refactor to do basic sanity on client and pass all options to server for
+# parsing.
+
+if ($config->{deletehost}) {
+    $arg->{hostname} = delete $config->{deletehost} || hostname;
+    my $m = $n->rmhost($arg);
+    say pp($m);
+}
+elsif ($config->{servicename}) {
+    $arg->{hostname} = delete $config->{hostname} || hostname;
+    $arg->{servicename} = delete $config->{servicename};
+    $arg->{check_command} = delete $config->{check_command};
+    $arg->{passive} = delete $config->{passive};
+    $arg->{silent} = delete $config->{silent};
+    my $m = $n->newservice($arg);
+    say pp($m);
+}
+elsif ($config->{hostname}) {
+    $arg->{hostname} = delete $config->{hostname} || hostname;
+    $arg->{hostgroup} = delete $config->{hostgroup};
+    my $m = $n->newhost($arg);
+    say pp($m);
+}
+
+for my $k (keys %$config) {
+    say "Ignoring option '$k'";
+}
+
+print "Clean exit\n";
+exit;
+
+sub usage {
+    print <<EOT;
+$0 -v --hostname --hostgroup --servicename --check_command --passive --silent --deletehost
+EOT
+    exit 1;
+}
+
